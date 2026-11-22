@@ -159,7 +159,7 @@ class PacketCaptureVpnService : VpnService() {
         val notification: Notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle(getString(R.string.vpn_notification_title))
             .setContentText(getString(R.string.vpn_notification_text))
-            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setSmallIcon(R.drawable.ic_stat_piraiba)
             .setOngoing(true)
             .setContentIntent(openAppIntent)
             .addAction(0, getString(R.string.action_stop_capture), stopIntent)

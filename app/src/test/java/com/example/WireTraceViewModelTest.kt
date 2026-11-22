@@ -318,6 +318,14 @@ class WireTraceViewModelTest {
         }
     }
 
+    @Test
+    fun vpnDisclosureAcceptedDefaultsFalseAndTransitionsOnAccept() = runBlocking {
+        val viewModel = WireTraceViewModel()
+        assertFalse(viewModel.vpnDisclosureAccepted.value)
+        viewModel.acceptVpnDisclosure()
+        assertTrue(viewModel.vpnDisclosureAccepted.value)
+    }
+
     private fun buildIpv4Udp(
         srcIp: ByteArray,
         dstIp: ByteArray,

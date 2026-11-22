@@ -96,10 +96,12 @@ class WireTraceViewModel : ViewModel() {
     private val _darkTheme = MutableStateFlow(true)
     private val _resolveHostnames = MutableStateFlow(true)
     private val _toastEvent = MutableStateFlow<String?>(null)
+    private val _vpnDisclosureAccepted = MutableStateFlow(false)
     private var appContext: Context? = null
     private var alertStoreBound = false
 
     val toastEvent: StateFlow<String?> = _toastEvent.asStateFlow()
+    val vpnDisclosureAccepted: StateFlow<Boolean> = _vpnDisclosureAccepted.asStateFlow()
     val alertConfig: StateFlow<AlertThresholdConfig> = AlertMonitor.config
     val alertEvents: StateFlow<List<NetworkAlertEvent>> = AlertMonitor.alerts
     val unreadAlertCount: StateFlow<Int> = AlertMonitor.unreadCount
@@ -122,6 +124,21 @@ class WireTraceViewModel : ViewModel() {
                 .collect { loaded ->
                     AlertMonitor.updateConfig(loaded)
                 }
+        }
+        viewModelScope.launch {
+            AlertConfigStore.observeVpnDisclosureAccepted(appCtx)
+                .catch { _vpnDisclosureAccepted.value = false }
+                .collect { accepted ->
+                    _vpnDisclosureAccepted.value = accepted
+                }
+        }
+    }
+
+    fun acceptVpnDisclosure() {
+        _vpnDisclosureAccepted.value = true
+        val ctx = appContext ?: return
+        viewModelScope.launch {
+            runCatching { AlertConfigStore.setVpnDisclosureAccepted(ctx, true) }
         }
     }
 

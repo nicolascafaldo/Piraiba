@@ -20,10 +20,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Analytics
 import androidx.compose.material.icons.rounded.DarkMode
@@ -34,6 +37,7 @@ import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PrivacyTip
 import androidx.compose.material.icons.rounded.Radar
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.SwapHoriz
@@ -85,6 +89,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.BuildConfig
 import com.example.R
 import com.example.capture.AlertConfigStore
 import com.example.capture.CaptureRepository
@@ -132,6 +137,7 @@ fun WireTraceApp(
     val latestAlertEvent by viewModel.latestAlertEvent.collectAsStateWithLifecycle()
     val rootSandboxState by viewModel.rootSandboxState.collectAsStateWithLifecycle()
     val sandboxUiState by viewModel.sandboxUiState.collectAsStateWithLifecycle()
+    val vpnDisclosureAccepted by viewModel.vpnDisclosureAccepted.collectAsStateWithLifecycle()
 
     // The top bar must reflect EVERY capture backend, not just the VPN tunnel: with root
     // tcpdump or LAN multicast listen running (VPN off), the old VPN-only flag showed
@@ -149,6 +155,8 @@ fun WireTraceApp(
     val currentRoute = navBackStackEntry?.destination?.route ?: WireTraceRoutes.PACKETS
     var showMenu by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
+    var showVpnDisclosureDialog by remember { mutableStateOf(false) }
+    var showPrivacyAboutDialog by remember { mutableStateOf(false) }
     var pendingExportFilteredOnly by remember { mutableStateOf(false) }
     var pendingExportFromSandbox by remember { mutableStateOf(false) }
     var followStreamKey by remember { mutableStateOf<String?>(null) }
@@ -274,7 +282,7 @@ fun WireTraceApp(
         viewModel.updateAlertConfig(alertConfig.copy(notifySystemBar = granted))
     }
 
-    fun requestStartCapture() {
+    fun launchVpnConsentPrompt() {
         val hostContext = context.findActivity() ?: context
         val prepareIntent = try {
             VpnService.prepare(hostContext)
@@ -293,6 +301,14 @@ fun WireTraceApp(
         } else {
             startVpnService()
         }
+    }
+
+    fun requestStartCapture() {
+        if (!vpnDisclosureAccepted) {
+            showVpnDisclosureDialog = true
+            return
+        }
+        launchVpnConsentPrompt()
     }
 
     val exportPcapLauncher = rememberLauncherForActivityResult(
@@ -325,6 +341,77 @@ fun WireTraceApp(
     }
 
     WireTraceTheme(darkTheme = uiState.darkTheme) {
+        if (showVpnDisclosureDialog) {
+            AlertDialog(
+                onDismissRequest = { showVpnDisclosureDialog = false },
+                title = {
+                    Text(
+                        text = stringResource(R.string.vpn_disclosure_title),
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                },
+                text = {
+                    Text(
+                        text = stringResource(R.string.vpn_disclosure_body),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.verticalScroll(rememberScrollState())
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showVpnDisclosureDialog = false
+                            viewModel.acceptVpnDisclosure()
+                            launchVpnConsentPrompt()
+                        },
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("vpn_disclosure_accept_button")
+                    ) {
+                        Text(stringResource(R.string.vpn_disclosure_accept))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showVpnDisclosureDialog = false },
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("vpn_disclosure_decline_button")
+                    ) {
+                        Text("Decline")
+                    }
+                }
+            )
+        }
+        if (showPrivacyAboutDialog) {
+            AlertDialog(
+                onDismissRequest = { showPrivacyAboutDialog = false },
+                title = {
+                    Text(
+                        text = stringResource(R.string.privacy_about_title),
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                },
+                text = {
+                    Text(
+                        text = "${stringResource(R.string.app_name)} v${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})\n" +
+                            "MIT License — Copyright (c) 2026 Nicolas H. Cafaldo\n\n" +
+                            stringResource(R.string.privacy_user_responsibility) + "\n\n" +
+                            stringResource(R.string.vpn_disclosure_body),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.verticalScroll(rememberScrollState())
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { showPrivacyAboutDialog = false },
+                        modifier = Modifier.heightIn(min = 48.dp)
+                    ) {
+                        Text("Close")
+                    }
+                }
+            )
+        }
         if (vpnIssueDialogMessage != null) {
             AlertDialog(
                 onDismissRequest = { vpnIssueDialogMessage = null },
@@ -571,6 +658,15 @@ fun WireTraceApp(
                                             viewModel.clearCapture()
                                         },
                                         modifier = Modifier.testTag("clear_capture_menu_item")
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.action_privacy_about)) },
+                                        leadingIcon = { Icon(Icons.Rounded.PrivacyTip, contentDescription = null) },
+                                        onClick = {
+                                            showMenu = false
+                                            showPrivacyAboutDialog = true
+                                        },
+                                        modifier = Modifier.testTag("privacy_about_menu_item")
                                     )
                                 }
                             }

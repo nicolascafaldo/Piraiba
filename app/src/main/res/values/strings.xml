@@ -16,4 +16,10 @@
     <string name="vpn_notification_text">Capturing and analyzing device network traffic locally</string>
     <string name="empty_capture_title">Ready to Capture Live Traffic</string>
     <string name="empty_capture_subtitle">Start the local VPN sniffer to intercept, dissect, and inspect real-time TCP, UDP, DNS, HTTP, and TLS packets without root—or open a saved .pcap file.</string>
+    <string name="action_privacy_about">Privacy &amp; About</string>
+    <string name="vpn_disclosure_title">Local VPN &amp; Data Disclosure</string>
+    <string name="vpn_disclosure_body" formatted="false">Piraíba uses Android\'s VpnService to create a local, on-device loopback tunnel (tun0) so you can passively capture and inspect your device\'s network packets without root.\n\n• What is accessed: IP, TCP, UDP, DNS, HTTP, and TLS metadata and unencrypted payloads passing through this device.\n• Where data goes: 100% stays in local device memory (up to 4,000 packets). Traffic is forwarded directly to its destination and is never routed through any remote VPN server.\n• No collection or tracking: Piraíba contains no ads, analytics, or background uploads. Reverse DNS queries are disabled by default. Files are written or shared only when you export a .pcap capture.\n• User responsibility: Use Piraíba only on devices and networks you own or are authorized to inspect. You are solely responsible for how and what you capture, export, or do with this app; the developer assumes no liability for user actions.</string>
+    <string name="vpn_disclosure_accept">Accept &amp; Continue</string>
+    <string name="privacy_about_title">Privacy &amp; License</string>
+    <string name="privacy_user_responsibility" formatted="false">Provided "AS IS" under the MIT License without warranty of any kind. The developer is not responsible or liable for how or what you use this application to capture, inspect, export, or share. Only inspect devices and networks you are legally authorized to monitor.</string>
 </resources>

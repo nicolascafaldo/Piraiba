@@ -18,6 +18,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.MainActivity
+import com.example.R
 import com.example.model.AlertThresholdConfig
 import com.example.model.NetworkAlertEvent
 import com.example.model.PortMonitorMode
@@ -44,6 +45,7 @@ object AlertConfigStore {
     private val KEY_MAX_BYTES_PER_SEC_KB = intPreferencesKey("max_bytes_per_sec_kb")
     private val KEY_MAX_PACKETS_PER_SEC = intPreferencesKey("max_packets_per_sec")
     private val KEY_NOTIFY_SYSTEM_BAR = booleanPreferencesKey("notify_system_bar")
+    private val KEY_VPN_DISCLOSURE_ACCEPTED = booleanPreferencesKey("vpn_disclosure_accepted")
 
     fun observeConfig(context: Context): Flow<AlertThresholdConfig> =
         context.applicationContext.alertConfigDataStore.data.map { prefs ->
@@ -79,6 +81,17 @@ object AlertConfigStore {
             prefs[KEY_MAX_BYTES_PER_SEC_KB] = config.maxBytesPerSecKB
             prefs[KEY_MAX_PACKETS_PER_SEC] = config.maxPacketsPerSec
             prefs[KEY_NOTIFY_SYSTEM_BAR] = config.notifySystemBar
+        }
+    }
+
+    fun observeVpnDisclosureAccepted(context: Context): Flow<Boolean> =
+        context.applicationContext.alertConfigDataStore.data.map { prefs ->
+            prefs[KEY_VPN_DISCLOSURE_ACCEPTED] ?: false
+        }
+
+    suspend fun setVpnDisclosureAccepted(context: Context, accepted: Boolean) {
+        context.applicationContext.alertConfigDataStore.edit { prefs ->
+            prefs[KEY_VPN_DISCLOSURE_ACCEPTED] = accepted
         }
     }
 
@@ -123,7 +136,7 @@ object AlertConfigStore {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val notification = NotificationCompat.Builder(context, ALERT_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setSmallIcon(R.drawable.ic_stat_piraiba)
             .setContentTitle("${event.category.label}: ${event.title}")
             .setContentText(event.detail)
             .setAutoCancel(true)
