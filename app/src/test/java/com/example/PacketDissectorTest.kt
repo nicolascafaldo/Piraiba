@@ -4,6 +4,7 @@ import com.example.capture.DnsResolutionCache
 import com.example.dissector.DisplayFilterParser
 import com.example.dissector.PacketDissector
 import com.example.dissector.PcapCodec
+import com.example.model.CaptureSource
 import com.example.model.LinkLayerType
 import com.example.model.PacketDirection
 import com.example.model.ProtocolType
@@ -32,7 +33,7 @@ class PacketDissectorTest {
     @After
     fun tearDown() {
         DnsResolutionCache.clear()
-        DnsResolutionCache.setAutoPtrEnabled(true)
+        DnsResolutionCache.setAutoPtrEnabled(false)
     }
 
     @Test
@@ -288,6 +289,83 @@ class PacketDissectorTest {
             QuickFilter.ALL
         )
         assertTrue(deepParens.isValid)
+    }
+
+    @Test
+    fun displayFilterMatchesArpMdnsAndSsdpProtocolAtomsWithoutMetadataCrossMatch() {
+        val mdnsPkt = PacketDissector.dissect(
+            id = 30L,
+            rawBytes = buildIpv4Udp(
+                srcIp = byteArrayOf(192.toByte(), 168.toByte(), 1, 20),
+                dstIp = byteArrayOf(224.toByte(), 0, 0, 251.toByte()),
+                srcPort = 5353,
+                dstPort = 5353,
+                payload = ByteArray(12)
+            ),
+            timestampMs = 1_700_000_003_000L,
+            relativeTimeMs = 0L,
+            direction = PacketDirection.INBOUND,
+            captureSource = CaptureSource.LAN_PROMISCUOUS
+        )
+        val ssdpPkt = PacketDissector.dissect(
+            id = 31L,
+            rawBytes = buildIpv4Udp(
+                srcIp = byteArrayOf(192.toByte(), 168.toByte(), 1, 30),
+                dstIp = byteArrayOf(239.toByte(), 255.toByte(), 255.toByte(), 250.toByte()),
+                srcPort = 49000,
+                dstPort = 1900,
+                payload = "NOTIFY * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\n\r\n".toByteArray(StandardCharsets.US_ASCII)
+            ),
+            timestampMs = 1_700_000_003_010L,
+            relativeTimeMs = 10L,
+            direction = PacketDirection.INBOUND,
+            captureSource = CaptureSource.LAN_PROMISCUOUS
+        )
+        val arpRaw = ByteArray(14).apply { this[12] = 0x08; this[13] = 0x06 } + byteArrayOf(
+            0x00, 0x01, 0x08, 0x00, 0x06, 0x04, 0x00, 0x01,
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+            192.toByte(), 168.toByte(), 1, 25,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            192.toByte(), 168.toByte(), 1, 1
+        )
+        val arpPkt = PacketDissector.dissect(
+            id = 32L,
+            rawBytes = arpRaw,
+            timestampMs = 1_700_000_003_020L,
+            relativeTimeMs = 20L,
+            direction = PacketDirection.INBOUND,
+            linkLayerType = LinkLayerType.ETHERNET,
+            captureSource = CaptureSource.LAN_PROMISCUOUS
+        )
+        val tcpWithArpWord = PacketDissector.dissect(
+            id = 33L,
+            rawBytes = buildIpv4Tcp(
+                srcIp = byteArrayOf(10, 1, 10, 1),
+                dstIp = byteArrayOf(93, 184.toByte(), 215.toByte(), 14),
+                srcPort = 52000,
+                dstPort = 80,
+                flags = PacketDissector.TCP_FLAG_PSH or PacketDissector.TCP_FLAG_ACK,
+                payload = "GET /carpet HTTP/1.1\r\nHost: example.arpa\r\n\r\n".toByteArray(StandardCharsets.US_ASCII)
+            ),
+            timestampMs = 1_700_000_003_030L,
+            relativeTimeMs = 30L,
+            direction = PacketDirection.OUTBOUND
+        )
+
+        val mdnsFilter = DisplayFilterParser.parse("mdns", QuickFilter.ALL)
+        val ssdpFilter = DisplayFilterParser.parse("ssdp", QuickFilter.ALL)
+        val arpFilter = DisplayFilterParser.parse("arp", QuickFilter.ALL)
+        val compoundFilter = DisplayFilterParser.parse("(mdns || ssdp) && !arp", QuickFilter.ALL)
+
+        assertTrue(mdnsFilter.matches(mdnsPkt))
+        assertFalse(mdnsFilter.matches(ssdpPkt))
+        assertTrue(ssdpFilter.matches(ssdpPkt))
+        assertFalse(ssdpFilter.matches(mdnsPkt))
+        assertTrue(arpFilter.matches(arpPkt))
+        assertFalse(arpFilter.matches(tcpWithArpWord))
+        assertTrue(compoundFilter.matches(mdnsPkt))
+        assertTrue(compoundFilter.matches(ssdpPkt))
+        assertFalse(compoundFilter.matches(arpPkt))
     }
 
     private fun buildIpv4Tcp(

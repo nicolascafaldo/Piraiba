@@ -1,5 +1,6 @@
 package com.example.capture
 
+import android.os.Build
 import com.example.dissector.PcapCodec
 import com.example.model.CaptureSource
 import com.example.model.LinkLayerType
@@ -95,9 +96,13 @@ object RootPromiscuousSniffer {
 
             val probeResult = runCatching {
                 val proc = ProcessBuilder(probeCmd).redirectErrorStream(true).start()
-                val finished = proc.waitFor(4, TimeUnit.SECONDS)
+                val finished = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    proc.waitFor(4, TimeUnit.SECONDS)
+                } else {
+                    waitForLegacyProcess(proc, 4_000L)
+                }
                 if (!finished) {
-                    proc.destroyForcibly()
+                    forceDestroy(proc)
                     error("su check timed out waiting for root prompt")
                 }
                 val output = BufferedReader(InputStreamReader(proc.inputStream)).use { it.readText() }
@@ -295,7 +300,7 @@ object RootPromiscuousSniffer {
     fun stopCapture() {
         val wasRunning = capturing.getAndSet(false)
         runCatching { activeProcess?.destroy() }
-        runCatching { activeProcess?.destroyForcibly() }
+        runCatching { activeProcess?.let(::forceDestroy) }
         activeProcess = null
         runCatching { captureJob?.cancel() }
         captureJob = null
@@ -474,5 +479,29 @@ object RootPromiscuousSniffer {
         } else {
             (b0 shl 24) or (b1 shl 16) or (b2 shl 8) or b3
         }
+    }
+
+    private fun forceDestroy(proc: Process) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            proc.destroyForcibly()
+        } else {
+            proc.destroy()
+        }
+    }
+
+    private fun waitForLegacyProcess(proc: Process, timeoutMs: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (runCatching { proc.exitValue() }.isSuccess) {
+                return true
+            }
+            try {
+                Thread.sleep(50L)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+        }
+        return runCatching { proc.exitValue() }.isSuccess
     }
 }

@@ -30,7 +30,7 @@ class CaptureRepositoryIntegrityTest {
     @After
     fun tearDown() {
         CaptureRepository.clearCapture()
-        DnsResolutionCache.setAutoPtrEnabled(true)
+        DnsResolutionCache.setAutoPtrEnabled(false)
     }
 
     @Test

@@ -47,7 +47,7 @@ object DnsResolutionCache {
     private var socketProtector: ((DatagramSocket) -> Boolean)? = null
 
     @Volatile
-    private var autoPtrEnabled: Boolean = true
+    private var autoPtrEnabled: Boolean = false
 
     private val _resolvedHosts = MutableStateFlow<Map<String, ResolvedHost>>(emptyMap())
     val resolvedHosts: StateFlow<Map<String, ResolvedHost>> = _resolvedHosts.asStateFlow()

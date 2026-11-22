@@ -5,6 +5,7 @@ import com.example.capture.AlertMonitor
 import com.example.dissector.PacketDissector
 import com.example.model.AlertCategory
 import com.example.model.AlertThresholdConfig
+import com.example.model.CaptureSource
 import com.example.model.PacketDirection
 import com.example.model.PortMonitorMode
 import com.example.vpn.PacketChecksumUtils
@@ -151,6 +152,41 @@ class AlertMonitorTest {
         assertEquals("22,80,443,8080", encoded)
         assertEquals(setOf(22, 80, 443, 8080), AlertConfigStore.decodePorts(encoded))
         assertEquals(emptySet<Int>(), AlertConfigStore.decodePorts(""))
+    }
+
+    @Test
+    fun preservesLanPromiscuousCaptureSourceOnAlertEvents() {
+        AlertMonitor.updateConfig(
+            AlertThresholdConfig(
+                alertsEnabled = true,
+                highLatencyEnabled = false,
+                unauthorizedPortEnabled = true,
+                portMonitorMode = PortMonitorMode.WATCHED_PORTS,
+                flaggedPorts = setOf(23),
+                dataSpikeEnabled = false
+            )
+        )
+        val telnetLanBytes = buildIpv4Tcp(
+            srcIp = byteArrayOf(192.toByte(), 168.toByte(), 1, 99),
+            dstIp = byteArrayOf(192.toByte(), 168.toByte(), 1, 1),
+            srcPort = 23,
+            dstPort = 51000,
+            flags = PacketDissector.TCP_FLAG_SYN
+        )
+        AlertMonitor.evaluatePacket(
+            PacketDissector.dissect(
+                id = 77L,
+                rawBytes = telnetLanBytes,
+                timestampMs = 4_000_000L,
+                relativeTimeMs = 0L,
+                direction = PacketDirection.INBOUND,
+                captureSource = CaptureSource.LAN_PROMISCUOUS
+            )
+        )
+
+        val alert = AlertMonitor.alerts.value.single()
+        assertEquals(CaptureSource.LAN_PROMISCUOUS, alert.captureSource)
+        assertEquals(77L, alert.packetId)
     }
 
     private fun buildIpv4Tcp(

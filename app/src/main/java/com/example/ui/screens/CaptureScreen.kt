@@ -71,7 +71,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.model.CapturedPacket
-import com.example.model.ProbeType
 import com.example.model.QuickFilter
 import com.example.model.TrafficScopeFilter
 import com.example.ui.components.FilterHelpDialog
@@ -87,10 +86,8 @@ import com.example.viewmodel.CaptureUiState
 @Composable
 fun CaptureScreen(
     uiState: CaptureUiState,
-    probeBusy: Boolean,
     onStartCapture: () -> Unit,
     onOpenPcap: () -> Unit,
-    onRunProbe: (ProbeType) -> Unit,
     onFilterQueryChange: (String) -> Unit,
     onQuickFilterSelected: (QuickFilter) -> Unit,
     onTrafficScopeSelected: (TrafficScopeFilter) -> Unit,
@@ -315,14 +312,12 @@ fun CaptureScreen(
         if (uiState.packets.isEmpty()) {
             EmptyCaptureView(
                 isCapturing = uiState.isCapturing,
-                probeBusy = probeBusy,
                 hasActiveFilter = hasQuery ||
                     uiState.quickFilter != QuickFilter.ALL ||
                     uiState.trafficScopeFilter != TrafficScopeFilter.ALL,
                 totalBufferedPackets = uiState.phonePacketCount + uiState.lanBufferedPacketCount,
                 onStartCapture = onStartCapture,
                 onOpenPcap = onOpenPcap,
-                onRunProbe = onRunProbe,
                 onResetFilters = {
                     onFilterQueryChange("")
                     onQuickFilterSelected(QuickFilter.ALL)
@@ -581,12 +576,10 @@ private fun TelemetrySummaryStrip(
 @Composable
 private fun EmptyCaptureView(
     isCapturing: Boolean,
-    probeBusy: Boolean,
     hasActiveFilter: Boolean,
     totalBufferedPackets: Int,
     onStartCapture: () -> Unit,
     onOpenPcap: () -> Unit,
-    onRunProbe: (ProbeType) -> Unit,
     onResetFilters: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -653,7 +646,7 @@ private fun EmptyCaptureView(
                     )
                     Text(
                         text = if (isCapturing) {
-                            "Switch to any app or browser on your device to inspect real-time network packets as they flow through tun0, or trigger a test probe below."
+                            "Switch to any app or browser on your device to inspect real-time network packets as they flow through tun0."
                         } else {
                             stringResource(R.string.empty_capture_subtitle)
                         },
@@ -687,32 +680,6 @@ private fun EmptyCaptureView(
                                 Icon(Icons.Rounded.FolderOpen, contentDescription = null)
                                 Spacer(Modifier.width(6.dp))
                                 Text("Open .pcap")
-                            }
-                        }
-                    } else {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { onRunProbe(ProbeType.DNS_QUERY) },
-                                enabled = !probeBusy,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 48.dp)
-                                    .testTag("empty_dns_probe_button")
-                            ) {
-                                Text("DNS Probe")
-                            }
-                            OutlinedButton(
-                                onClick = { onRunProbe(ProbeType.HTTPS_TLS) },
-                                enabled = !probeBusy,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 48.dp)
-                                    .testTag("empty_tls_probe_button")
-                            ) {
-                                Text("TLS Probe")
                             }
                         }
                     }

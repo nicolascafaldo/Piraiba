@@ -159,13 +159,6 @@ enum class QuickFilter(val label: String) {
     ICMP("ICMP")
 }
 
-enum class ProbeType(val label: String, val description: String) {
-    DNS_QUERY("DNS Probe", "Queries 8.8.8.8 for an A-record"),
-    HTTP_GET("HTTP Probe", "Requests HTTP headers from example.com"),
-    HTTPS_TLS("TLS Probe", "Performs a TLS handshake with example.com"),
-    LAN_DISCOVERY("LAN Sweep", "Sends mDNS & SSDP local network discovery queries")
-}
-
 enum class RootSandboxStatus(val label: String) {
     UNCHECKED("Not Checked"),
     CHECKING("Checking Root..."),

@@ -22,7 +22,6 @@ import com.example.model.ConversationStream
 import com.example.model.NetworkAlertEvent
 import com.example.model.PacketDirection
 import com.example.model.PortMonitorMode
-import com.example.model.ProbeType
 import com.example.model.ProtocolStat
 import com.example.model.ProtocolType
 import com.example.model.QuickFilter
@@ -97,12 +96,10 @@ class WireTraceViewModel : ViewModel() {
     private val _darkTheme = MutableStateFlow(true)
     private val _resolveHostnames = MutableStateFlow(true)
     private val _toastEvent = MutableStateFlow<String?>(null)
-    private val _probeBusy = MutableStateFlow(false)
     private var appContext: Context? = null
     private var alertStoreBound = false
 
     val toastEvent: StateFlow<String?> = _toastEvent.asStateFlow()
-    val probeBusy: StateFlow<Boolean> = _probeBusy.asStateFlow()
     val alertConfig: StateFlow<AlertThresholdConfig> = AlertMonitor.config
     val alertEvents: StateFlow<List<NetworkAlertEvent>> = AlertMonitor.alerts
     val unreadAlertCount: StateFlow<Int> = AlertMonitor.unreadCount
@@ -254,22 +251,28 @@ class WireTraceViewModel : ViewModel() {
         lanSummaryFlow
     ) { values ->
         @Suppress("UNCHECKED_CAST")
+        val packets = values[4] as List<CapturedPacket>
+        @Suppress("UNCHECKED_CAST")
+        val throughputHistory = values[10] as List<ThroughputPoint>
+        @Suppress("UNCHECKED_CAST")
+        val resolvedDomains = values[13] as Map<String, ResolvedHost>
+        @Suppress("UNCHECKED_CAST")
         val lanState = values[14] as LanSummaryState
         CaptureUiState(
             isCapturing = values[0] as Boolean,
             captureStartTimeMs = values[1] as Long?,
             totalPacketCount = values[2] as Long,
             totalBytes = values[3] as Long,
-            packets = values[4] as List<CapturedPacket>,
+            packets = packets,
             filterQuery = values[5] as String,
             quickFilter = values[6] as QuickFilter,
             filterValidation = values[7] as ParsedDisplayFilter,
             selectedPacketId = values[8] as Long?,
             autoScroll = values[9] as Boolean,
-            throughputHistory = values[10] as List<ThroughputPoint>,
+            throughputHistory = throughputHistory,
             darkTheme = values[11] as Boolean,
             resolveHostnames = values[12] as Boolean,
-            resolvedDomains = values[13] as Map<String, ResolvedHost>,
+            resolvedDomains = resolvedDomains,
             lanMulticastEnabled = lanState.enabled,
             lanMulticastActive = lanState.active,
             lanPacketCount = lanState.lanTotalCount,
@@ -329,6 +332,8 @@ class WireTraceViewModel : ViewModel() {
         val lanState = values[1] as LanSummaryState
         @Suppress("UNCHECKED_CAST")
         val packetsPair = values[2] as Pair<List<CapturedPacket>, Int>
+        @Suppress("UNCHECKED_CAST")
+        val resolvedDomains = values[9] as Map<String, ResolvedHost>
         SandboxUiState(
             rootSandboxState = values[0] as RootSandboxState,
             lanMulticastEnabled = lanState.enabled,
@@ -342,7 +347,7 @@ class WireTraceViewModel : ViewModel() {
             selectedPacketId = values[6] as Long?,
             autoScroll = values[7] as Boolean,
             resolveHostnames = values[8] as Boolean,
-            resolvedDomains = values[9] as Map<String, ResolvedHost>
+            resolvedDomains = resolvedDomains
         )
     }.stateIn(
         scope = viewModelScope,
@@ -427,9 +432,8 @@ class WireTraceViewModel : ViewModel() {
     fun toggleResolveHostnames() {
         val next = !_resolveHostnames.value
         _resolveHostnames.value = next
-        DnsResolutionCache.setAutoPtrEnabled(next)
         _toastEvent.value = if (next) {
-            "DNS IP-to-domain resolution enabled"
+            "Passive DNS/SNI hostname resolution enabled"
         } else {
             "Showing raw IP addresses"
         }
@@ -494,6 +498,22 @@ class WireTraceViewModel : ViewModel() {
         }
     }
 
+    fun applyAlertInspection(event: NetworkAlertEvent): Boolean {
+        val isLan = event.captureSource == CaptureSource.LAN_PROMISCUOUS ||
+            (event.packetId != null && CaptureRepository.snapshotAllPackets()
+                .find { it.id == event.packetId }?.captureSource == CaptureSource.LAN_PROMISCUOUS)
+        if (isLan) {
+            _sandboxQuickFilter.value = QuickFilter.ALL
+            _sandboxFilterQuery.value = event.filterExpr.orEmpty()
+        } else {
+            _quickFilter.value = QuickFilter.ALL
+            _trafficScopeFilter.value = TrafficScopeFilter.PHONE_ONLY
+            _filterQuery.value = event.filterExpr.orEmpty()
+        }
+        _selectedPacketId.value = event.packetId
+        return isLan
+    }
+
     fun clearCapture() {
         _selectedPacketId.value = null
         CaptureRepository.clearCapture()
@@ -510,11 +530,12 @@ class WireTraceViewModel : ViewModel() {
     fun exportPcap(
         contentResolver: ContentResolver,
         uri: Uri,
-        filteredOnly: Boolean = false
+        filteredOnly: Boolean = false,
+        fromSandbox: Boolean = false
     ) {
         viewModelScope.launch {
             val packets = if (filteredOnly) {
-                filteredPackets.value
+                if (fromSandbox) sandboxUiState.value.packets else filteredPackets.value
             } else {
                 CaptureRepository.snapshotAllPackets()
             }
@@ -530,7 +551,7 @@ class WireTraceViewModel : ViewModel() {
                 }
             }
             _toastEvent.value = result.fold(
-                onSuccess = { "Saved ${packets.size} packets to .pcap (Wireshark-ready)" },
+                onSuccess = { "Saved ${packets.size} packets to .pcap" },
                 onFailure = { "Export failed: ${it.message}" }
             )
         }
@@ -540,11 +561,12 @@ class WireTraceViewModel : ViewModel() {
         context: Context,
         fileName: String,
         filteredOnly: Boolean,
+        fromSandbox: Boolean = false,
         onReadyToShare: (Uri, Int) -> Unit
     ) {
         viewModelScope.launch {
             val packets = if (filteredOnly) {
-                filteredPackets.value
+                if (fromSandbox) sandboxUiState.value.packets else filteredPackets.value
             } else {
                 CaptureRepository.snapshotAllPackets()
             }
@@ -608,19 +630,6 @@ class WireTraceViewModel : ViewModel() {
                 onFailure = {
                     _toastEvent.value = "Import failed: ${it.message}"
                 }
-            )
-        }
-    }
-
-    fun runProbe(type: ProbeType) {
-        if (_probeBusy.value) return
-        viewModelScope.launch {
-            _probeBusy.value = true
-            val result = CaptureRepository.sendDiagnosticProbe(type)
-            _probeBusy.value = false
-            _toastEvent.value = result.fold(
-                onSuccess = { it },
-                onFailure = { "Probe failed: ${it.message}" }
             )
         }
     }

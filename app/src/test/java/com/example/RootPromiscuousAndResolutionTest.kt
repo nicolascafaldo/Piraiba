@@ -33,7 +33,7 @@ class RootPromiscuousAndResolutionTest {
     @After
     fun teardown() {
         DnsResolutionCache.clear()
-        DnsResolutionCache.setAutoPtrEnabled(true)
+        DnsResolutionCache.setAutoPtrEnabled(false)
     }
 
     @Test
@@ -202,6 +202,52 @@ class RootPromiscuousAndResolutionTest {
         )
         assertEquals("192.168.1.90", pkt.srcIp)
         assertEquals("192.168.1.1", pkt.dstIp)
+    }
+
+    @Test
+    fun parseLibpcapStreamSkipsZeroLengthAndStopsAtOversizedBound() {
+        val out = ByteArrayOutputStream()
+        // Little-endian libpcap global header (LINKTYPE_ETHERNET = 1)
+        out.write(byteArrayOf(0xd4.toByte(), 0xc3.toByte(), 0xb2.toByte(), 0xa1.toByte()))
+        writeShortLe(out, 2); writeShortLe(out, 4)
+        writeIntLe(out, 0); writeIntLe(out, 0)
+        writeIntLe(out, 65535)
+        writeIntLe(out, PcapCodec.LINKTYPE_ETHERNET)
+
+        // Record 1: inclLen == 0 must be skipped without ending the stream
+        writeIntLe(out, 1_700_000_000); writeIntLe(out, 0)
+        writeIntLe(out, 0); writeIntLe(out, 0)
+
+        // Record 2: valid Ethernet + IPv4 UDP frame must still be delivered
+        val ethHeader = ByteArray(14).apply { this[12] = 0x08; this[13] = 0x00 }
+        val validFrame = ethHeader + buildIpv4Udp(
+            srcIp = byteArrayOf(192.toByte(), 168.toByte(), 1, 10),
+            dstIp = byteArrayOf(192.toByte(), 168.toByte(), 1, 1),
+            srcPort = 50000,
+            dstPort = 53,
+            payload = ByteArray(8)
+        )
+        writeIntLe(out, 1_700_000_001); writeIntLe(out, 0)
+        writeIntLe(out, validFrame.size); writeIntLe(out, validFrame.size)
+        out.write(validFrame)
+
+        // Record 3: inclLen > 1024 * 1024 must stop parsing immediately before allocating
+        writeIntLe(out, 1_700_000_002); writeIntLe(out, 0)
+        writeIntLe(out, (1024 * 1024) + 1); writeIntLe(out, (1024 * 1024) + 1)
+
+        // Record 4: trailing valid frame after the oversized header must not be reached
+        writeIntLe(out, 1_700_000_003); writeIntLe(out, 0)
+        writeIntLe(out, validFrame.size); writeIntLe(out, validFrame.size)
+        out.write(validFrame)
+
+        val collected = mutableListOf<Pair<ByteArray, LinkLayerType>>()
+        RootPromiscuousSniffer.parseLibpcapStream(ByteArrayInputStream(out.toByteArray())) { bytes, ll ->
+            collected.add(bytes to ll)
+        }
+
+        assertEquals(1, collected.size)
+        assertEquals(LinkLayerType.ETHERNET, collected.single().second)
+        assertEquals(validFrame.size, collected.single().first.size)
     }
 
     private fun buildMdnsResponseWithAdditionalA(

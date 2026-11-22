@@ -37,7 +37,6 @@ import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Radar
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Security
@@ -99,13 +98,11 @@ import com.example.viewmodel.SandboxUiState
 @Composable
 fun PromiscuousSandboxScreen(
     uiState: SandboxUiState,
-    probeBusy: Boolean,
     onFilterQueryChange: (String) -> Unit,
     onQuickFilterSelected: (QuickFilter) -> Unit,
     onToggleAutoScroll: () -> Unit,
     onToggleResolveHostnames: () -> Unit,
     onToggleLanMulticast: () -> Unit,
-    onRunLanSweep: () -> Unit,
     onProbeRoot: () -> Unit,
     onSelectInterface: (String) -> Unit,
     onBpfFilterChange: (String) -> Unit,
@@ -147,14 +144,12 @@ fun PromiscuousSandboxScreen(
         SandboxControlHeader(
             uiState = uiState,
             setupExpanded = setupExpanded,
-            probeBusy = probeBusy,
             hasActiveSearch = hasQuery,
             onOpenSearch = { showSearchDialog = true },
             onToggleExpand = { setupExpanded = !setupExpanded },
             onToggleAutoScroll = onToggleAutoScroll,
             onToggleResolveHostnames = onToggleResolveHostnames,
             onToggleLanMulticast = onToggleLanMulticast,
-            onRunLanSweep = onRunLanSweep,
             onProbeRoot = onProbeRoot,
             onSelectInterface = onSelectInterface,
             onBpfFilterChange = onBpfFilterChange,
@@ -518,14 +513,12 @@ private fun SandboxSearchDialog(
 private fun SandboxControlHeader(
     uiState: SandboxUiState,
     setupExpanded: Boolean,
-    probeBusy: Boolean,
     hasActiveSearch: Boolean,
     onOpenSearch: () -> Unit,
     onToggleExpand: () -> Unit,
     onToggleAutoScroll: () -> Unit,
     onToggleResolveHostnames: () -> Unit,
     onToggleLanMulticast: () -> Unit,
-    onRunLanSweep: () -> Unit,
     onProbeRoot: () -> Unit,
     onSelectInterface: (String) -> Unit,
     onBpfFilterChange: (String) -> Unit,
@@ -865,10 +858,8 @@ private fun SandboxControlHeader(
                     sandboxState = sandboxState,
                     isRootRunning = isRootRunning,
                     isChecking = isChecking,
-                    probeBusy = probeBusy,
                     statusColor = statusColor,
                     onProbeRoot = onProbeRoot,
-                    onRunLanSweep = onRunLanSweep,
                     onSelectInterface = onSelectInterface,
                     onBpfFilterChange = onBpfFilterChange,
                     onTogglePromiscuousMode = onTogglePromiscuousMode
@@ -883,10 +874,8 @@ private fun RootSandboxDetailsPanel(
     sandboxState: RootSandboxState,
     isRootRunning: Boolean,
     isChecking: Boolean,
-    probeBusy: Boolean,
     statusColor: Color,
     onProbeRoot: () -> Unit,
-    onRunLanSweep: () -> Unit,
     onSelectInterface: (String) -> Unit,
     onBpfFilterChange: (String) -> Unit,
     onTogglePromiscuousMode: (Boolean) -> Unit
@@ -957,23 +946,6 @@ private fun RootSandboxDetailsPanel(
                     }
                 }
             }
-        }
-
-        OutlinedButton(
-            onClick = onRunLanSweep,
-            enabled = !probeBusy,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .testTag("sandbox_lan_sweep_button")
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.Radar,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(if (probeBusy) "Running LAN Discovery Sweep..." else "Run LAN Discovery Sweep")
         }
 
         Row(

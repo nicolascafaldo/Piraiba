@@ -8,7 +8,6 @@ import com.example.vpn.PacketChecksumUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.io.ByteArrayOutputStream
 import java.net.BindException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -18,7 +17,6 @@ import java.net.InetSocketAddress
 import java.net.MulticastSocket
 import java.net.NetworkInterface
 import java.net.SocketTimeoutException
-import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -60,14 +58,11 @@ object LanMulticastSniffer {
     private var multicastLock: WifiManager.MulticastLock? = null
     private val activeSockets = mutableListOf<DatagramSocket>()
     private val listenerThreads = mutableListOf<Thread>()
-    @Volatile
-    private var activeProtector: ((DatagramSocket) -> Boolean)? = null
 
     fun start(
         context: Context,
         socketProtector: ((DatagramSocket) -> Boolean)?
     ) {
-        activeProtector = socketProtector
         if (!running.compareAndSet(false, true)) {
             return
         }
@@ -118,7 +113,6 @@ object LanMulticastSniffer {
         context: Context,
         socketProtector: ((DatagramSocket) -> Boolean)?
     ) {
-        activeProtector = socketProtector
         if (running.get()) {
             stop(resetCount = false)
             start(context, socketProtector)
@@ -152,76 +146,6 @@ object LanMulticastSniffer {
 
     fun resetCounter() {
         _lanPacketCount.value = 0L
-    }
-
-    /**
-     * Sends real mDNS PTR (_services._dns-sd._udp.local & _http._tcp.local) and
-     * SSDP M-SEARCH multicast queries on local Wi-Fi interfaces to elicit live LAN responses.
-     */
-    fun sendDiscoverySweep(socketProtector: ((DatagramSocket) -> Boolean)? = activeProtector): String {
-        val lanInterfaces = findMulticastInterfaces()
-        var sentCount = 0
-
-        val mdnsServicesQuery = buildMdnsPtrQuery(listOf("_services", "_dns-sd", "_udp", "local"))
-        val mdnsHttpQuery = buildMdnsPtrQuery(listOf("_http", "_tcp", "local"))
-        val ssdpQuery = (
-            "M-SEARCH * HTTP/1.1\r\n" +
-                "HOST: 239.255.255.250:1900\r\n" +
-                "MAN: \"ssdp:discover\"\r\n" +
-                "MX: 2\r\n" +
-                "ST: ssdp:all\r\n\r\n"
-            ).toByteArray(StandardCharsets.US_ASCII)
-
-        val mdnsGroup = InetAddress.getByName(MDNS_GROUP)
-        val ssdpGroup = InetAddress.getByName(SSDP_GROUP)
-
-        MulticastSocket().use { sock ->
-            val protectedOk = socketProtector?.invoke(sock) ?: true
-            if (!protectedOk) {
-                // Sending from an unprotected socket while the VPN is up would route these
-                // probes back into the TUN (recapture loop). Refuse rather than loop.
-                return "LAN sweep skipped: VPN could not protect the discovery socket"
-            }
-            sock.timeToLive = 255
-            if (lanInterfaces.isEmpty()) {
-                runCatching {
-                    sock.send(DatagramPacket(mdnsServicesQuery, mdnsServicesQuery.size, mdnsGroup, MDNS_PORT))
-                    sentCount++
-                }
-                runCatching {
-                    sock.send(DatagramPacket(mdnsHttpQuery, mdnsHttpQuery.size, mdnsGroup, MDNS_PORT))
-                    sentCount++
-                }
-                runCatching {
-                    sock.send(DatagramPacket(ssdpQuery, ssdpQuery.size, ssdpGroup, SSDP_PORT))
-                    sentCount++
-                }
-            } else {
-                for (netIf in lanInterfaces) {
-                    runCatching {
-                        sock.networkInterface = netIf
-                        sock.send(DatagramPacket(mdnsServicesQuery, mdnsServicesQuery.size, mdnsGroup, MDNS_PORT))
-                        sentCount++
-                    }
-                    runCatching {
-                        sock.networkInterface = netIf
-                        sock.send(DatagramPacket(mdnsHttpQuery, mdnsHttpQuery.size, mdnsGroup, MDNS_PORT))
-                        sentCount++
-                    }
-                    runCatching {
-                        sock.networkInterface = netIf
-                        sock.send(DatagramPacket(ssdpQuery, ssdpQuery.size, ssdpGroup, SSDP_PORT))
-                        sentCount++
-                    }
-                }
-            }
-        }
-
-        return if (sentCount > 0) {
-            "Sent $sentCount real mDNS/SSDP LAN discovery sweeps on Wi-Fi"
-        } else {
-            "No active Wi-Fi multicast interface available for LAN sweep"
-        }
     }
 
     private fun runGroupListener(
@@ -439,24 +363,5 @@ object LanMulticastSniffer {
         PacketChecksumUtils.updateIpv4Checksum(pkt, 0, 20)
         PacketChecksumUtils.updateTransportChecksum(pkt, 0, 20, 17, udpLen)
         return pkt
-    }
-
-    private fun buildMdnsPtrQuery(labels: List<String>): ByteArray {
-        val out = ByteArrayOutputStream()
-        out.write(0x00); out.write(0x00) // mDNS Transaction ID = 0
-        out.write(0x00); out.write(0x00) // Standard Query
-        out.write(0x00); out.write(0x01) // QDCOUNT = 1
-        out.write(0x00); out.write(0x00)
-        out.write(0x00); out.write(0x00)
-        out.write(0x00); out.write(0x00)
-        for (label in labels) {
-            val bytes = label.toByteArray(StandardCharsets.US_ASCII)
-            out.write(bytes.size)
-            out.write(bytes)
-        }
-        out.write(0x00)
-        out.write(0x00); out.write(0x0C) // QTYPE = PTR (12)
-        out.write(0x00); out.write(0x01) // QCLASS = IN (1)
-        return out.toByteArray()
     }
 }

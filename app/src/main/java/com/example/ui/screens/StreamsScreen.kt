@@ -318,8 +318,7 @@ private fun StreamCard(
                 }
 
                 IconButton(
-                    onClick = onFilterClick,
-                    modifier = Modifier.size(36.dp)
+                    onClick = onFilterClick
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.FilterAlt,

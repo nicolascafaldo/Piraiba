@@ -158,7 +158,6 @@ fun PacketInspectorPane(
                             IconButton(
                                 onClick = onBack,
                                 modifier = Modifier
-                                    .size(40.dp)
                                     .align(Alignment.CenterVertically)
                                     .testTag("inspector_back_button")
                             ) {

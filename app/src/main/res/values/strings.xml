@@ -10,7 +10,6 @@
     <string name="action_export_pcap">Export PCAP</string>
     <string name="action_import_pcap">Open PCAP</string>
     <string name="action_clear">Clear</string>
-    <string name="filter_placeholder">Display filter (e.g. dns, tls, tcp.port == 443)</string>
     <string name="vpn_notification_channel_name">Packet Capture Service</string>
     <string name="vpn_notification_channel_desc">Shows live status while local VPN packet capture is active</string>
     <string name="vpn_notification_title">Piraíba Capture Active</string>

@@ -35,6 +35,7 @@ import com.example.model.ResolvedHost
 import com.example.ui.theme.LocalProtocolColors
 import com.example.ui.theme.MonoFontFamily
 import com.example.ui.theme.WarmGoldLive
+import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -109,7 +110,7 @@ fun PacketRowCard(
                             modifier = Modifier.align(Alignment.CenterVertically)
                         )
                         Text(
-                            text = String.format("%.3fs", packet.relativeTimeMs / 1000.0),
+                            text = String.format(Locale.US, "%.3fs", packet.relativeTimeMs / 1000.0),
                             style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonoFontFamily),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.align(Alignment.CenterVertically)

@@ -49,5 +49,6 @@ data class NetworkAlertEvent(
     val title: String,
     val detail: String,
     val packetId: Long? = null,
-    val filterExpr: String? = null
+    val filterExpr: String? = null,
+    val captureSource: CaptureSource = CaptureSource.DEVICE_VPN
 )

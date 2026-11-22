@@ -130,6 +130,9 @@ object DisplayFilterParser {
             "http" -> return { it.protocol == ProtocolType.HTTP }
             "quic" -> return { it.protocol == ProtocolType.QUIC }
             "icmp" -> return { it.protocol == ProtocolType.ICMP }
+            "arp" -> return { it.transportProtocol == "ARP" }
+            "mdns" -> return { it.transportProtocol == "UDP" && (it.srcPort == 5353 || it.dstPort == 5353) }
+            "ssdp" -> return { it.transportProtocol == "UDP" && (it.srcPort == 1900 || it.dstPort == 1900) }
             "out", "outbound" -> return { it.direction == PacketDirection.OUTBOUND }
             "in", "inbound" -> return { it.direction == PacketDirection.INBOUND }
             "lan", "promisc", "promiscuous" -> return { it.captureSource == CaptureSource.LAN_PROMISCUOUS }

@@ -10,6 +10,7 @@ import com.example.model.ProtocolLayer
 import com.example.model.ProtocolType
 import com.example.vpn.PacketChecksumUtils
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 
 /**
  * Pure Kotlin multi-layer network packet dissector (Ethernet II, IPv4, IPv6, TCP, UDP, ICMP, DNS, TLS/SNI, HTTP, QUIC).
@@ -62,7 +63,7 @@ object PacketDissector {
                         0,
                         len
                     ),
-                    ProtocolField("Relative Time", String.format("%.6f s", relativeTimeMs / 1000.0), 0, len)
+                    ProtocolField("Relative Time", String.format(Locale.US, "%.6f s", relativeTimeMs / 1000.0), 0, len)
                 )
             )
         )

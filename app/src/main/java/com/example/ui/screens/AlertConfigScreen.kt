@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteSweep
@@ -31,7 +32,6 @@ import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Speed
-import androidx.compose.material.icons.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -558,7 +558,7 @@ private fun DataSpikeThresholdCard(
     onPacketsLimitChange: (Int) -> Unit
 ) {
     RuleConfigCard(
-        icon = Icons.Rounded.TrendingUp,
+        icon = Icons.AutoMirrored.Rounded.TrendingUp,
         iconTint = AmberAlert,
         title = "Unexpected Data Spikes",
         subtitle = "Detects sudden 1-second bandwidth or packet-rate bursts",

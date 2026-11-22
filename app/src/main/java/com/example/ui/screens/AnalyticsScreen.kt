@@ -24,11 +24,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Public
-import androidx.compose.material.icons.rounded.Science
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,8 +43,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.util.Locale
 import com.example.model.ConversationStream
-import com.example.model.ProbeType
 import com.example.model.ProtocolStat
 import com.example.model.ResolvedHost
 import com.example.model.ThroughputPoint
@@ -64,8 +62,6 @@ fun AnalyticsScreen(
     protocolStats: List<ProtocolStat>,
     conversations: List<ConversationStream>,
     topHosts: List<Pair<String, Int>>,
-    probeBusy: Boolean,
-    onRunProbe: (ProbeType) -> Unit,
     onSelectConnection: (ConversationStream) -> Unit,
     onFilterHost: (String) -> Unit,
     onFilterIp: (String) -> Unit,
@@ -113,83 +109,6 @@ fun AnalyticsScreen(
                 resolvedDomains = uiState.resolvedDomains,
                 onFilterIp = onFilterIp
             )
-        }
-
-        item {
-            DiagnosticProbesCard(
-                probeBusy = probeBusy,
-                onRunProbe = onRunProbe
-            )
-        }
-    }
-}
-
-@Composable
-private fun DiagnosticProbesCard(
-    probeBusy: Boolean,
-    onRunProbe: (ProbeType) -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("diagnostic_probes_card")
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Science,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.secondary
-                )
-                Column {
-                    Text(
-                        text = "Diagnostic Network Probes",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = "Send real test packets to verify VPN tunnel or LAN broadcast capture.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            ProbeType.entries.forEach { probe ->
-                OutlinedButton(
-                    onClick = { onRunProbe(probe) },
-                    enabled = !probeBusy,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .testTag("analytics_probe_${probe.name.lowercase()}")
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        Text(
-                            text = probe.label,
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
-                        )
-                        Text(
-                            text = probe.description,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
         }
     }
 }
@@ -421,7 +340,7 @@ private fun ProtocolDistributionCard(protocolStats: List<ProtocolStat>) {
                                 )
                             }
                             Text(
-                                text = "${formatByteCount(stat.totalBytes)} (${String.format("%.1f%%", pct)})",
+                                text = "${formatByteCount(stat.totalBytes)} (${String.format(Locale.US, "%.1f%%", pct)})",
                                 style = MaterialTheme.typography.labelMedium.copy(fontFamily = MonoFontFamily),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

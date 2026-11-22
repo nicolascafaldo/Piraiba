@@ -4,6 +4,7 @@ import com.example.dissector.PacketDissector
 import com.example.model.AlertCategory
 import com.example.model.AlertSeverity
 import com.example.model.AlertThresholdConfig
+import com.example.model.CaptureSource
 import com.example.model.CapturedPacket
 import com.example.model.NetworkAlertEvent
 import com.example.model.PacketDirection
@@ -140,7 +141,8 @@ object AlertMonitor {
                             detail = "SYN→SYN/ACK RTT to $remoteIp:${packet.srcPort} exceeded ${cfg.maxLatencyMs} ms threshold",
                             packetId = packet.id,
                             filterExpr = "ip.addr == $remoteIp && tcp.port == ${packet.srcPort}",
-                            timestampMs = packet.timestampMs
+                            timestampMs = packet.timestampMs,
+                            captureSource = packet.captureSource
                         )
                     }
                 }
@@ -166,7 +168,8 @@ object AlertMonitor {
                             detail = "DNS response for $targetLabel from $remoteIp exceeded ${cfg.maxLatencyMs} ms threshold",
                             packetId = packet.id,
                             filterExpr = "dns && ip.addr == $remoteIp",
-                            timestampMs = packet.timestampMs
+                            timestampMs = packet.timestampMs,
+                            captureSource = packet.captureSource
                         )
                     }
                 }
@@ -192,7 +195,8 @@ object AlertMonitor {
                             detail = "HTTP TTFB from $hostText exceeded ${cfg.maxLatencyMs} ms threshold",
                             packetId = packet.id,
                             filterExpr = "http && ip.addr == $remoteIp",
-                            timestampMs = packet.timestampMs
+                            timestampMs = packet.timestampMs,
+                            captureSource = packet.captureSource
                         )
                     }
                 }
@@ -231,7 +235,8 @@ object AlertMonitor {
             detail = "${packet.transportProtocol} ${packet.direction.shortLabel} with $remoteIp:$remotePort — $modeDesc",
             packetId = packet.id,
             filterExpr = "ip.addr == $remoteIp && port == $remotePort",
-            timestampMs = nowMs
+            timestampMs = nowMs,
+            captureSource = packet.captureSource
         )
     }
 
@@ -278,7 +283,8 @@ object AlertMonitor {
                 detail = "1s traffic rate ($kbPerSec KB/s) exceeded ${cfg.maxBytesPerSecKB} KB/s limit",
                 packetId = packet.id,
                 filterExpr = null,
-                timestampMs = nowMs
+                timestampMs = nowMs,
+                captureSource = packet.captureSource
             )
         } else if (shouldFirePps) {
             emitAlert(
@@ -288,7 +294,8 @@ object AlertMonitor {
                 detail = "1s frame rate ($snapshotPackets pkt/s) exceeded ${cfg.maxPacketsPerSec} pkt/s limit",
                 packetId = packet.id,
                 filterExpr = null,
-                timestampMs = nowMs
+                timestampMs = nowMs,
+                captureSource = packet.captureSource
             )
         }
     }
@@ -300,7 +307,8 @@ object AlertMonitor {
         detail: String,
         packetId: Long?,
         filterExpr: String?,
-        timestampMs: Long
+        timestampMs: Long,
+        captureSource: CaptureSource = CaptureSource.DEVICE_VPN
     ) {
         val event = NetworkAlertEvent(
             id = nextAlertId.incrementAndGet(),
@@ -310,7 +318,8 @@ object AlertMonitor {
             title = title,
             detail = detail,
             packetId = packetId,
-            filterExpr = filterExpr
+            filterExpr = filterExpr,
+            captureSource = captureSource
         )
         synchronized(lock) {
             val updated = listOf(event) + _alerts.value.take(MAX_ALERT_HISTORY - 1)

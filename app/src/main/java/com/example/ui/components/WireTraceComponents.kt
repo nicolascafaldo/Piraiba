@@ -471,7 +471,7 @@ private fun ensurePcapExtension(name: String): String {
 
 fun formatByteCount(bytes: Long): String = when {
     bytes < 1024L -> "$bytes B"
-    bytes < 1024L * 1024L -> String.format("%.1f KB", bytes / 1024.0)
-    bytes < 1024L * 1024L * 1024L -> String.format("%.2f MB", bytes / (1024.0 * 1024.0))
-    else -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+    bytes < 1024L * 1024L -> String.format(Locale.US, "%.1f KB", bytes / 1024.0)
+    bytes < 1024L * 1024L * 1024L -> String.format(Locale.US, "%.2f MB", bytes / (1024.0 * 1024.0))
+    else -> String.format(Locale.US, "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
 }

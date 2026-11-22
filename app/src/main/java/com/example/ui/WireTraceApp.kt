@@ -89,7 +89,6 @@ import com.example.R
 import com.example.capture.AlertConfigStore
 import com.example.capture.CaptureRepository
 import com.example.model.CaptureSource
-import com.example.model.ProbeType
 import com.example.model.QuickFilter
 import com.example.model.RootSandboxStatus
 import com.example.ui.components.ExportPcapDialog
@@ -125,7 +124,6 @@ fun WireTraceApp(
     val conversations by viewModel.conversations.collectAsStateWithLifecycle()
     val protocolStats by viewModel.protocolStats.collectAsStateWithLifecycle()
     val topHosts by viewModel.topHosts.collectAsStateWithLifecycle()
-    val probeBusy by viewModel.probeBusy.collectAsStateWithLifecycle()
     val toastEvent by viewModel.toastEvent.collectAsStateWithLifecycle()
     val vpnStatus by CaptureRepository.statusMessage.collectAsStateWithLifecycle()
     val alertConfig by viewModel.alertConfig.collectAsStateWithLifecycle()
@@ -147,9 +145,12 @@ fun WireTraceApp(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route ?: WireTraceRoutes.PACKETS
     var showMenu by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     var pendingExportFilteredOnly by remember { mutableStateOf(false) }
+    var pendingExportFromSandbox by remember { mutableStateOf(false) }
     var followStreamKey by remember { mutableStateOf<String?>(null) }
     var vpnIssueDialogMessage by remember { mutableStateOf<String?>(null) }
     var issueDialogIsVpn by remember { mutableStateOf(true) }
@@ -297,7 +298,14 @@ fun WireTraceApp(
     val exportPcapLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/vnd.tcpdump.pcap")
     ) { uri ->
-        uri?.let { viewModel.exportPcap(context.contentResolver, it, pendingExportFilteredOnly) }
+        uri?.let {
+            viewModel.exportPcap(
+                contentResolver = context.contentResolver,
+                uri = it,
+                filteredOnly = pendingExportFilteredOnly,
+                fromSandbox = pendingExportFromSandbox
+            )
+        }
     }
 
     val importPcapLauncher = rememberLauncherForActivityResult(
@@ -370,19 +378,34 @@ fun WireTraceApp(
             )
         }
         if (showExportDialog) {
+            val isSandboxTab = currentRoute == WireTraceRoutes.SANDBOX
+            val totalBufferedCount = uiState.phonePacketCount + uiState.lanBufferedPacketCount
+            val displayedCount = if (isSandboxTab) sandboxUiState.packets.size else uiState.packets.size
+            val tabFilterActive = if (isSandboxTab) {
+                sandboxUiState.filterQuery.isNotBlank() || sandboxUiState.quickFilter != QuickFilter.ALL
+            } else {
+                uiState.filterQuery.isNotBlank() || uiState.quickFilter != QuickFilter.ALL
+            }
+            val hasActiveFilter = (displayedCount < totalBufferedCount) || tabFilterActive
             ExportPcapDialog(
-                totalCount = CaptureRepository.snapshotAllPackets().size,
-                filteredCount = uiState.packets.size,
-                hasActiveFilter = uiState.filterQuery.isNotBlank() || uiState.quickFilter != QuickFilter.ALL,
+                totalCount = totalBufferedCount,
+                filteredCount = displayedCount,
+                hasActiveFilter = hasActiveFilter,
                 totalBytes = uiState.totalBytes,
                 onSaveToDevice = { fileName, filteredOnly ->
                     pendingExportFilteredOnly = filteredOnly
+                    pendingExportFromSandbox = isSandboxTab
                     showExportDialog = false
                     exportPcapLauncher.launch(fileName)
                 },
                 onSharePcap = { fileName, filteredOnly ->
                     showExportDialog = false
-                    viewModel.exportPcapForSharing(context, fileName, filteredOnly) { uri, count ->
+                    viewModel.exportPcapForSharing(
+                        context = context,
+                        fileName = fileName,
+                        filteredOnly = filteredOnly,
+                        fromSandbox = isSandboxTab
+                    ) { uri, count ->
                         val shareIntent = Intent(Intent.ACTION_SEND).apply {
                             type = "application/vnd.tcpdump.pcap"
                             putExtra(Intent.EXTRA_STREAM, uri)
@@ -424,8 +447,6 @@ fun WireTraceApp(
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val useRail = maxWidth >= 600.dp
             val isExpanded = maxWidth >= 840.dp
-            val navBackStackEntry by navController.currentBackStackEntryAsState()
-            val currentRoute = navBackStackEntry?.destination?.route ?: WireTraceRoutes.PACKETS
 
             fun navigateTab(route: String) {
                 navController.navigate(route) {
@@ -725,10 +746,8 @@ fun WireTraceApp(
                                 Row(modifier = Modifier.fillMaxSize()) {
                                     CaptureScreen(
                                         uiState = uiState,
-                                        probeBusy = probeBusy,
                                         onStartCapture = ::requestStartCapture,
                                         onOpenPcap = { importPcapLauncher.launch(arrayOf("*/*")) },
-                                        onRunProbe = viewModel::runProbe,
                                         onFilterQueryChange = viewModel::setFilterQuery,
                                         onQuickFilterSelected = viewModel::setQuickFilter,
                                         onTrafficScopeSelected = viewModel::setTrafficScopeFilter,
@@ -754,10 +773,8 @@ fun WireTraceApp(
                             } else {
                                 CaptureScreen(
                                     uiState = uiState,
-                                    probeBusy = probeBusy,
                                     onStartCapture = ::requestStartCapture,
                                     onOpenPcap = { importPcapLauncher.launch(arrayOf("*/*")) },
-                                    onRunProbe = viewModel::runProbe,
                                     onFilterQueryChange = viewModel::setFilterQuery,
                                     onQuickFilterSelected = viewModel::setQuickFilter,
                                     onTrafficScopeSelected = viewModel::setTrafficScopeFilter,
@@ -776,13 +793,11 @@ fun WireTraceApp(
                                 Row(modifier = Modifier.fillMaxSize()) {
                                     PromiscuousSandboxScreen(
                                         uiState = sandboxUiState,
-                                        probeBusy = probeBusy,
                                         onFilterQueryChange = viewModel::setSandboxFilterQuery,
                                         onQuickFilterSelected = viewModel::setSandboxQuickFilter,
                                         onToggleAutoScroll = viewModel::toggleSandboxAutoScroll,
                                         onToggleResolveHostnames = viewModel::toggleResolveHostnames,
                                         onToggleLanMulticast = { viewModel.toggleLanMulticast(context) },
-                                        onRunLanSweep = { viewModel.runProbe(ProbeType.LAN_DISCOVERY) },
                                         onProbeRoot = viewModel::probeRootSandbox,
                                         onSelectInterface = viewModel::setRootSandboxInterface,
                                         onBpfFilterChange = viewModel::setRootSandboxBpfFilter,
@@ -809,13 +824,11 @@ fun WireTraceApp(
                             } else {
                                 PromiscuousSandboxScreen(
                                     uiState = sandboxUiState,
-                                    probeBusy = probeBusy,
                                     onFilterQueryChange = viewModel::setSandboxFilterQuery,
                                     onQuickFilterSelected = viewModel::setSandboxQuickFilter,
                                     onToggleAutoScroll = viewModel::toggleSandboxAutoScroll,
                                     onToggleResolveHostnames = viewModel::toggleResolveHostnames,
                                     onToggleLanMulticast = { viewModel.toggleLanMulticast(context) },
-                                    onRunLanSweep = { viewModel.runProbe(ProbeType.LAN_DISCOVERY) },
                                     onProbeRoot = viewModel::probeRootSandbox,
                                     onSelectInterface = viewModel::setRootSandboxInterface,
                                     onBpfFilterChange = viewModel::setRootSandboxBpfFilter,
@@ -868,8 +881,6 @@ fun WireTraceApp(
                                 protocolStats = protocolStats,
                                 conversations = conversations,
                                 topHosts = topHosts,
-                                probeBusy = probeBusy,
-                                onRunProbe = viewModel::runProbe,
                                 onSelectConnection = { stream -> followStreamKey = stream.key },
                                 onFilterHost = { host ->
                                     viewModel.setFilterQuery("host contains \"$host\"")
@@ -905,9 +916,12 @@ fun WireTraceApp(
                                 onResetDefaults = viewModel::resetAlertDefaults,
                                 onClearAlerts = viewModel::clearAlerts,
                                 onInspectAlert = { event ->
-                                    event.filterExpr?.let { viewModel.setFilterQuery(it) }
-                                    event.packetId?.let { viewModel.selectPacket(it) }
-                                    navigateTab(WireTraceRoutes.PACKETS)
+                                    val target = if (viewModel.applyAlertInspection(event)) {
+                                        WireTraceRoutes.SANDBOX
+                                    } else {
+                                        WireTraceRoutes.PACKETS
+                                    }
+                                    navigateTab(target)
                                 },
                                 onScreenViewed = viewModel::markAlertsRead
                             )

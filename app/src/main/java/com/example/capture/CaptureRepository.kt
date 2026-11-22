@@ -6,7 +6,6 @@ import com.example.model.CaptureSource
 import com.example.model.CapturedPacket
 import com.example.model.LinkLayerType
 import com.example.model.PacketDirection
-import com.example.model.ProbeType
 import com.example.model.ThroughputPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,18 +16,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
-import java.net.DatagramPacket
 import java.net.DatagramSocket
-import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.net.Socket
-import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
-import javax.net.ssl.SSLSocket
-import javax.net.ssl.SSLSocketFactory
 
 data class CaptureStatusEvent(
     val id: Long,
@@ -122,20 +112,6 @@ object CaptureRepository {
         _lanMulticastEnabled.value = enabled
         if (enabled) {
             LanMulticastSniffer.start(context, vpnSocketProtector)
-            scope.launch(Dispatchers.IO) {
-                runCatching { LanMulticastSniffer.sendDiscoverySweep(vpnSocketProtector) }
-                    .onSuccess { result ->
-                        // Don't silently drop sweep failures (e.g. VPN protect() refusal):
-                        // the toggle toast says "active" and would otherwise be the only
-                        // thing the user sees.
-                        if (!result.startsWith("Sent")) {
-                            postStatus(result, isError = result.contains("skipped"))
-                        }
-                    }
-                    .onFailure {
-                        postStatus("LAN discovery sweep failed: ${it.message ?: "unknown error"}", isError = true)
-                    }
-            }
         } else {
             LanMulticastSniffer.stop(resetCount = false)
         }
@@ -333,82 +309,5 @@ object CaptureRepository {
             }
         }
         _throughputHistory.value = points
-    }
-
-    /**
-     * Executes a genuine unprotected network diagnostic probe (DNS, HTTP, or TLS) so
-     * traffic routes through the active VPN TUN interface and appears live in the packet list.
-     */
-    suspend fun sendDiagnosticProbe(type: ProbeType): Result<String> = withContext(Dispatchers.IO) {
-        runCatching {
-            when (type) {
-                ProbeType.DNS_QUERY -> {
-                    val queryBytes = buildDnsQueryPacket("example.com")
-                    DatagramSocket().use { socket ->
-                        socket.soTimeout = 3000
-                        val target = InetAddress.getByName("8.8.8.8")
-                        socket.send(DatagramPacket(queryBytes, queryBytes.size, target, 53))
-                        val respBuf = ByteArray(512)
-                        val respPkt = DatagramPacket(respBuf, respBuf.size)
-                        socket.receive(respPkt)
-                        "DNS A-record response received from 8.8.8.8 (${respPkt.length} bytes)"
-                    }
-                }
-                ProbeType.HTTP_GET -> {
-                    Socket().use { socket ->
-                        socket.soTimeout = 4000
-                        socket.connect(InetSocketAddress("example.com", 80), 4000)
-                        val req = "GET / HTTP/1.1\r\nHost: example.com\r\nUser-Agent: Piraiba/1.0\r\nConnection: close\r\n\r\n"
-                        socket.getOutputStream().write(req.toByteArray(StandardCharsets.US_ASCII))
-                        socket.getOutputStream().flush()
-                        val buf = ByteArray(1024)
-                        val read = socket.getInputStream().read(buf)
-                        val statusLine = if (read > 0) {
-                            String(buf, 0, read, StandardCharsets.US_ASCII).lineSequence().firstOrNull().orEmpty()
-                        } else {
-                            "Connection closed"
-                        }
-                        "HTTP response: $statusLine"
-                    }
-                }
-                ProbeType.HTTPS_TLS -> {
-                    val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
-                    (factory.createSocket() as SSLSocket).use { sslSocket ->
-                        sslSocket.soTimeout = 4000
-                        sslSocket.connect(InetSocketAddress("example.com", 443), 4000)
-                        sslSocket.startHandshake()
-                        val session = sslSocket.session
-                        "TLS handshake succeeded: ${session.protocol} (${session.cipherSuite})"
-                    }
-                }
-                ProbeType.LAN_DISCOVERY -> {
-                    LanMulticastSniffer.sendDiscoverySweep(vpnSocketProtector)
-                }
-            }
-        }
-    }
-
-    private fun buildDnsQueryPacket(domain: String): ByteArray {
-        val out = ByteArrayOutputStream()
-        // Transaction ID (0x4A 0x54)
-        out.write(0x4A)
-        out.write(0x54)
-        // Flags: Standard Query, Recursion Desired (0x0100)
-        out.write(0x01)
-        out.write(0x00)
-        // QDCOUNT = 1, ANCOUNT = 0, NSCOUNT = 0, ARCOUNT = 0
-        out.write(0x00); out.write(0x01)
-        out.write(0x00); out.write(0x00)
-        out.write(0x00); out.write(0x00)
-        out.write(0x00); out.write(0x00)
-        for (label in domain.split('.')) {
-            val bytes = label.toByteArray(StandardCharsets.US_ASCII)
-            out.write(bytes.size)
-            out.write(bytes)
-        }
-        out.write(0x00) // root terminator
-        out.write(0x00); out.write(0x01) // QTYPE = A (1)
-        out.write(0x00); out.write(0x01) // QCLASS = IN (1)
-        return out.toByteArray()
     }
 }
